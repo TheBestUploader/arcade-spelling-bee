@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arcade Spelling Bee - Campaign Edition</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0; padding: 0;
+            background-color: #060713; color: #e2e8f0;
+            font-family: system-ui, -apple-system, sans-serif;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            min-height: 100vh; overflow: hidden;
+            user-select: none;
+        }
+        #ui {
+            width: 800px; display: flex;
+            justify-content: space-between; align-items: center;
+            padding: 12px 20px; background: #0f1123;
+            border: 3px solid #22254b; border-bottom: none;
+            font-size: 16px; font-weight: bold;
+        }
+        #score { color: #00f5d4; }
+        #strikes { color: #ff5964; }
+        #level { color: #ffb703; }
+        #streak { color: #9b5de5; }
+        
+        #gameArena {
+            width: 800px;
+            height: 500px;
+            border: 3px solid #22254b;
+            background-color: #02030a;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: none; /* Hides standard cursor inside the game */
+        }
+
+        #wordDisplay {
+            font-size: 64px;
+            font-weight: 900;
+            letter-spacing: 12px;
+            color: #e2e8f0;
+            margin-bottom: 25px;
+            text-align: center;
+            text-transform: uppercase;
+            display: none;
+        }
+        #clueDisplay {
+            font-size: 18px;
+            color: #9b5de5;
+            max-width: 680px;
+            text-align: center;
+            line-height: 1.6;
+            padding: 0 30px;
+            display: none;
+        }
+
+        /* Mouse Tracking Kinetic Dot */
+        #kineticDot {
+            position: absolute;
+            width: 24px; height: 24px;
+            background-color: #ffb703;
+            border-radius: 50%;
+            pointer-events: none; /* Stops it from blocking mouse actions */
+            transform: translate(-50%, -50%); /* Centers it directly over the cursor position */
+            box-shadow: 0 0 15px #ffb703;
+            display: none;
+            z-index: 100;
+        }
+
+        #menuScreen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: #02030a;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            cursor: default; /* Show regular cursor on menu selection */
+        }
+        #menuScreen h1 {
+            font-size: 38px; color: #e2e8f0; margin-bottom: 30px; letter-spacing: 2px;
+        }
+        .modeBtn {
+            width: 240px; padding: 15px; margin: 10px;
+            font-size: 18px; font-weight: bold; border-radius: 6px;
+            cursor: pointer; border: 3px solid transparent;
+            transition: all 0.2s ease; background: #0f1123; text-align: center;
+        }
+        #btnEasy { color: #00f5d4; border-color: #00f5d4; }
+        #btnMedium { color: #ffb703; border-color: #ffb703; }
+        #btnHard { color: #ff5964; border-color: #ff5964; }
+        .modeBtn:hover { transform: scale(1.05); filter: brightness(1.2); }
+
+        #gameOverScreen, #victoryScreen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(2, 3, 10, 0.98);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 999;
+            cursor: default;
+        }
+        #gameOverScreen h1 { color: #ff5964; font-size: 42px; margin-bottom: 10px; }
+        #victoryScreen h1 { color: #00f5d4; font-size: 42px; margin-bottom: 10px; }
+        p { font-size: 18px; margin: 5px 0; }
+    </style>
+</head>
+<body>
+
+    <div id="ui">
+        <div id="modeIndicator" style="color: #64748b; letter-spacing: 1px;">SELECT MODE</div>
+        <div>LVL: <span id="level">1</span>/10 (Word: <span id="progress">0</span>/5)</div>
+        <div>STREAK: <span id="streak">0</span></div>
+        <div>SCORE: <span id="score">0</span></div>
+        <div>STRIKES: <span id="strikes">0/3</span></div>
+    </div>
+
+    <div id="gameArena">
+        <div id="menuScreen">
+            <h1>CHOOSE YOUR CAMPAIGN</h1>
+            <div class="modeBtn" id="btnEasy">EASY (1 Blank)</div>
+            <div class="modeBtn" id="btnMedium">MEDIUM (2 Blanks)</div>
+            <div class="modeBtn" id="btnHard">HARD (3 Blanks)</div>
+        </div>
+
+        <div id="wordDisplay">...</div>
+        <div id="clueDisplay">Initializing Core...</div>
+        <div id="kineticDot"></div>
+
+        <div id="gameOverScreen">
+            <h1>GAME OVER</h1>
+            <p id="finalScore">Final Score: 0 points</p>
+            <p style="color: #64748b; margin-top: 20px;">Press F5 to restart</p>
+        </div>
+
+        <div id="victoryScreen">
+            <h1>DIFFICULTY COMPLETE!</h1>
+            <p style="color: #ffb703; font-size: 24px; font-weight: bold; margin-bottom: 10px;">You conquered the campaign!</p>
+            <p id="victoryScore">Final Score: 0 points</p>
+            <p style="color: #64748b; margin-top: 20px;">Press F5 to try another challenge</p>
+        </div>
+    </div>
+<script>
+    // Structured Campaign Levels (Strictly unique, 5 words per level, 10 levels total)
+    const campaigns = {
+        easy: {
+            1:  [{word:"CAT",hint:"Purrs and catches mice."}, {word:"SUN",hint:"Lights up daytime sky."}, {word:"DOG",hint:"Man's loyal barking friend."}, {word:"BOX",hint:"Cardboard item to ship gifts."}, {word:"HAT",hint:"Worn on your head."}],
+            2:  [{word:"BALL",hint:"Round toy you kick or throw."}, {word:"FROG",hint:"Green jumping amphibian."}, {word:"FISH",hint:"Swims underwater using gills."}, {word:"DUCK",hint:"Water bird that quacks."}, {word:"TREE",hint:"Tall outdoor plant with leaves."}],
+            3:  [{word:"APPLE",hint:"Crunchy red or green fruit."}, {word:"SHARK",hint:"Large ocean predator with teeth."}, {word:"CLOCK",hint:"Tells you what hour it is."}, {word:"SNAKE",hint:"Slithering legless reptile."}, {word:"TRAIN",hint:"Runs on tracks and goes choo-choo."}],
+            4:  [{word:"SPIDER",hint:"Has 8 legs and weaves webs."}, {word:"ROCKET",hint:"Blasts off into outer space."}, {word:"CASTLE",hint:"Fortified home for royalty."}, {word:"WIZARD",hint:"Casts magical spells."}, {word:"SHIELD",hint:"Blocks enemy sword attacks."}],
+            5:  [{word:"AVATAR",hint:"Your game character profile image."}, {word:"PORTAL",hint:"Magical teleportation gateway."}, {word:"DRAGON",hint:"Fire-breathing flying beast."}, {word:"KEYBOARD",hint:"Device used to type letters."}, {word:"MONITOR",hint:"Screen that displays the game layout."}],
+            6:  [{word:"BICYCLE",hint:"Two-wheeled vehicle you pedal."}, {word:"CAMERA",hint:"Captures photos or recording loops."}, {word:"GUITAR",hint:"Six-stringed musical instrument."}, {word:"HAMMER",hint:"Tool used to pound nails into wood."}, {word:"JACKET",hint:"Clothing worn to stay warm."}],
+            7:  [{word:"MONKEY",hint:"Swings from trees and loves bananas."}, {word:"PENCIL",hint:"Used to sketch designs or write words."}, {word:"PLANET",hint:"Orbiting globe like Mars or Saturn."}, {word:"RIVER",hint:"Flowing body of fresh water."}, {word:"SILVER",hint:"Shiny precious metal element."}],
+            8:  [{word:"TIGER",hint:"Big orange wild cat with stripes."}, {word:"WINDOW",hint:"Glass pane in a wall to look outside."}, {word:"YELLOW",hint:"The color of lemons or school buses."}, {word:"ZEBRA",hint:"Wild horse with black and white stripes."}, {word:"BLANKET",hint:"Cozy cloth cover used on a bed."}],
+            9:  [{word:"CHICKEN",hint:"Farm bird that lays eggs."}, {word:"DOLPHIN",hint:"Smart ocean mammal that leaps up."}, {word:"FLOWER",hint:"Bright blooming part of a plant."}, {word:"GARDEN",hint:"Plot of land for growing vegetables."}, {word:"HELMET",hint:"Protective gear worn on your head."}],
+            10: [{word:"LANTERN",hint:"Portable lamp used to light dark areas."}, {word:"MIRROR",hint:"Reflective glass showing your face."}, {word:"ORANGE",hint:"Citrus fruit and vibrant color mixed."}, {word:"PUPPET",hint:"Doll controlled by strings or hands."}, {word:"PIRATE",hint:"Sailing bandit looking for hidden chests."}]
+        },
+        medium: {
+            1:  [{word:"MATRIX",hint:"Grid space framework array."}, {word:"CYBER",hint:"Relating to computer systems."}, {word:"NETWORK",hint:"Linked system of item nodes."}, {word:"CONSOLE",hint:"Hardware machine used to play games."}, {word:"ENGINE",hint:"Core software powering graphics."}],
+            2:  [{word:"CIRCUIT",hint:"Complete path for electricity flow."}, {word:"COMPASS",hint:"Navigation tool pointing North."}, {word:"CRYSTAL",hint:"Shiny clear geometric mineral gem."}, {word:"DIAMOND",hint:"Hardest natural gemstone on earth."}, {word:"DYNAMIC",hint:"Constantly changing or fluid active setups."}],
+            3:  [{word:"ELEMENT",hint:"Pure chemical structure component."}, {word:"FORTRAN",hint:"Early pioneer computing script code."}, {word:"GRAVITY",hint:"Force pulling items toward earth center."}, {word:"HORIZON",hint:"Line where sky meets ground boundary."}, {word:"IMPULSE",hint:"Sudden force push action signal."}],
+            4:  [{word:"JOURNEY",hint:"Long expedition traveling across zones."}, {word:"KINETIC",hint:"Energy relating to active physical motion."}, {word:"LANTERN",hint:"Glass case holding a burning light."}, {word:"MAGNET",hint:"Iron object that attracts metals."}, {word:"NEBULA",hint:"Interstellar cloud of cosmic dust and gas."}],
+            5:  [{word:"ORACLE",hint:"All-knowing guide or source of wisdom."}, {word:"PHANTOM",hint:"Ghostly illusion seen in shadows."}, {word:"QUANTUM",hint:"Subatomic physics scale logic tier."}, {word:"REPLICA",hint:"Exact duplicate copy of a model design."}, {word:"SPECTRUM",hint:"Band of colors produced by light rays."}],
+            6:  [{word:"TEXTURE",hint:"Surface feel or look of game models."}, {word:"UPGRADE",hint:"Process of advancing equipment stats."}, {word:"VENTURE",hint:"Risky or daring journey map path."}, {word:"VORTEX",hint:"Whirling funnel loop of liquid or wind."}, {word:"WHISPER",hint:"Speaking quietly using breath voices."}],
+            7:  [{word:"ACADEMY",hint:"Institution of specialized elite learning."}, {word:"BIOLOGY",hint:"The scientific study of living life forms."}, {word:"CAPTAIN",hint:"The commanding officer of a ship or crew."}, {word:"DESTINY",hint:"Events that will surely happen in the future."}, {word:"ECLIPSE",hint:"Shadow block covering a glowing planet sun."}],
+            8:  [{word:"FACTION",hint:"A specialized sub-group or guild guild."}, {word:"GLACIER",hint:"Massive slow moving river of solid ice."}, {word:"HARMONY",hint:"Pleasing combination of musical notes."}, {word:"ILLUSION",hint:"Deceptive magic trick visualization layout."}, {word:"JUSTICE",hint:"Fair administration of law and order values."}],
+            9:  [{word:"KINGDOM",hint:"Country or realm ruled by royalty monarchs."}, {word:"LEOPARD",hint:"Large spotted wild cat hunting in trees."}, {word:"MYSTERY",hint:"Secret puzzle or unexplained occurrence event."}, {word:"NOMADIC",hint:"Moving frequently from camp to camp area."}, {word:"OCTAGON",hint:"Geometric shape containing eight flat sides."}],
+            10: [{word:"PHOENIX",hint:"Mythical firebird reborn out of its ashes."}, {word:"REBEL",hint:"Fighter standing up against bad rulers."}, {word:"SAFARI",hint:"Expedition journey to observe wild animals."}, {word:"THUNDER",hint:"Booming acoustic noise shock after lightning."}, {word:"VOLCANO",hint:"Mountain erupting with explosive lava vents."}]
+        },
+        hard: {
+            1:  [{word:"QUASAR",hint:"Extreme cosmic high energy radio source."}, {word:"ZEPHYR",hint:"Light refreshing gentle western breeze."}, {word:"LABYRINTH",hint:"Intricate maze puzzle framework setup."}, {word:"OBLIVION",hint:"State of being fully wiped out and forgotten."}, {word:"PARADOX",hint:"Self-contradictory logical riddle concept."}],
+            2:  [{word:"SYNAPSE",hint:"Nerve bridge gap routing chemical codes."}, {word:"CATACLYSM",hint:"Violent geographical upheaval event disaster."}, {word:"AMETHYST",hint:"Purple gemstone quartz mineral shard."}, {word:"CHAMELEON",hint:"Lizard that alters color skin arrays."}, {word:"CHRONICLE",hint:"Historical register of legendary timeline events."}],
+            3:  [{word:"DECIPHER",hint:"Convert code lines back into normal text."}, {word:"EVALUATE",hint:"Form an idea of the value or amount of."}, {word:"FRAGMENT",hint:"Isolated broken piece shattered off a structure."}, {word:"GARRISON",hint:"Troops stationed in a fortress to defend it."}, {word:"HIERARCHY",hint:"System ranking parts ranking above another part."}],
+            4:  [{word:"INCUBATE",hint:"Keep eggs warm to cause hatching steps."}, {word:"JEOPARDY",hint:"Danger of loss, harm, or failure situation."}, {word:"KALEIDOSCOPE",hint:"Optical toy rotating shifting color glass forms."}, {word:"LIQUEFY",hint:"Make or become liquid under high heat temperatures."}, {word:"METAMORPHIC",hint:"Rock transformed by extreme crust pressure."}],
+            5:  [{word:"NOSTALGIA",hint:"Sentimental longing for past happy moments."}, {word:"OMNIPRESENT",hint:"Widely or constantly encountered widespread presence."}, {word:"PERPENDICULAR",hint:"At an angle of 90 degrees to a line horizontal."}, {word:"QUARANTINE",hint:"State of isolation to halt contagion spread."}, {word:"RENAISSANCE",hint:"Revival of art and literature under new light."}],
+            6:  [{word:"SCAVENGER",hint:"Animal or player foraging dead waste resource material."}, {word:"TRAJECTORY",hint:"Path followed by a flying projectile missile launch."}, {word:"UNANIMOUS",hint:"Fully agreed upon by all parties involved choices."}, {word:"VELOCITY",hint:"The speed of something moving in a given vector direction."}, {word:"XENON",hint:"Heavy noble gas element tracking neon lines."}],
+            7:  [{word:"ARCHEOLOGY",hint:"Study of ancient human history and ruins excavation."}, {word:"BENEVOLENT",hint:"Well meaning and kindly character nature."}, {word:"CONSTELLATION",hint:"Group of stars forming a recognized pattern sky shape."}, {word:"DIMENSIONAL",hint:"Relating to space measurement lengths."}, {word:"ECCENTRIC",hint:"Unconventional and slightly strange behavior."}],
+            8:  [{word:"FLUORESCENT",hint:"Vividly colorful or glowing brightly under radiation."}, {word:"GEOMETRIC",hint:"Characterized by regular lines and shapes angles."}, {word:"HYPOTHESIS",hint:"Proposed explanation made on limited evidence baseline."}, {word:"INFRASTRUCTURE",hint:"Basic physical and organizational structures system."}, {word:"JUXTAPOSITION",hint:"Two things being placed close together with contrasting effect."}],
+            9:  [{word:"LABORATORY",hint:"Room or building equipped for scientific experiments research."}, {word:"MALICIOUS",hint:"Intending or showing a desire to do harm enemy intention."}, {word:"NAVIGATIONAL",hint:"Relating to the process of directing a vessel path course."}, {word:"OBSIDIAN",hint:"Dark glasslike volcanic rock formed by rapid cooling lava."}, {word:"PALEONTOLOGY",hint:"The branch of science concerned with fossil animals plants."}],
+            10: [{word:"QUADRILATERAL",hint:"A geometric shape framework possessing four flat sides."}, {word:"REVERBERATION",hint:"Prolongation of a sound resonance echo bounce effect."}, {word:"SPECTACULAR",hint:"Beautifully dramatic, breathtaking, and eye-catching visual display."}, {word:"THERMODYNAMIC",hint:"Relation between heat and mechanical forms of energy."}, {word:"UNPREDICTABLE",hint:"Not able to be foreseen or known beforehand random actions."}]
+        }
+    };
+
+    let activeDifficulty = 'easy';
+    let blanksCount = 1;
+
+    let score = 0;
+    let strikes = 0;
+    let currentLevel = 1;
+    let currentStreak = 0;
+    let wordIndexInLevel = 0;
+    let gameOver = false;
+
+    let currentWord = "";
+    let visibleCharsArray = [];
+    let missingLettersPool = [];
+
+    const arena = document.getElementById("gameArena");
+    const wordEl = document.getElementById("wordDisplay");
+    const clueEl = document.getElementById("clueDisplay");
+    const dotEl = document.getElementById("kineticDot");
+    
+    const scoreTxt = document.getElementById("score");
+    const strikesTxt = document.getElementById("strikes");
+    const levelTxt = document.getElementById("level");
+    const progressTxt = document.getElementById("progress");
+    const streakTxt = document.getElementById("streak");
+    const modeIndicator = document.getElementById("modeIndicator");
+    const menuScreen = document.getElementById("menuScreen");
+    const gameOverScreen = document.getElementById("gameOverScreen");
+    const victoryScreen = document.getElementById("victoryScreen");
+    const finalScoreTxt = document.getElementById("finalScore");
+    const victoryScoreTxt = document.getElementById("victoryScore");
+
+    // TRACK MOUSE MOVEMENT AND DROP TRAILS
+    arena.addEventListener("mousemove", (e) => {
+        if (menuScreen.style.display !== "none" || gameOver || victoryScreen.style.display === "flex") return;
+        
+        let rect = arena.getBoundingClientRect();
+        let mouseX = e.clientX - rect.left;
+        let mouseY = e.clientY - rect.top;
+
+        // Move primary player dot
+        dotEl.style.left = mouseX + "px";
+        dotEl.style.top = mouseY + "px";
+
+        // DROP TRAIL PARTICLE
+        createTrailParticle(mouseX, mouseY);
+    });
+
+    function createTrailParticle(x, y) {
+        const particle = document.createElement("div");
+        
+        // Grab current style/color from the active dot indicator
+        particle.style.position = "absolute";
+        particle.style.width = "20px";
+        particle.style.height = "20px";
+        particle.style.borderRadius = "50%;";
+        particle.style.left = x + "px";
+        particle.style.top = y + "px";
+        particle.style.transform = "translate(-50%, -50%)";
+        particle.style.pointerEvents = "none";
+        particle.style.borderRadius = "50%";
+        particle.style.zIndex = "90";
+        
+        // Match current active target glow color states
+        particle.style.backgroundColor = dotEl.style.backgroundColor || "#ffb703";
+        particle.style.boxShadow = dotEl.style.boxShadow || "0 0 15px #ffb703";
+        
+        // Dynamic CSS disappearing keyframe setup
+        particle.style.transition = "all 0.4s cubic-bezier(0.1, 0.8, 0.3, 1)";
+        
+        arena.appendChild(particle);
+
+        // Instantly trigger fade-out animation parameters on the next draw loop frame
+        setTimeout(() => {
+            particle.style.opacity = "0";
+            particle.style.width = "0px";
+            particle.style.height = "0px";
+        }, 10);
+
+        // Wipe HTML node completely out of data memory when done fading
+        setTimeout(() => {
+            particle.remove();
+        }, 400);
+    }
+
+    document.getElementById("btnEasy").addEventListener("click", () => startGame('easy', 1));
+    document.getElementById("btnMedium").addEventListener("click", () => startGame('medium', 2));
+    document.getElementById("btnHard").addEventListener("click", () => startGame('hard', 3));
+
+    function startGame(mode, blanks) {
+        activeDifficulty = mode;
+        blanksCount = blanks;
+        currentLevel = 1;
+        wordIndexInLevel = 0;
+        score = 0;
+        strikes = 0;
+
+        modeIndicator.innerText = mode.toUpperCase() + " CAMPAIGN";
+        modeIndicator.style.color = mode === 'easy' ? "#00f5d4" : mode === 'medium' ? "#ffb703" : "#ff5964";
+
+        menuScreen.style.display = "none";
+        wordEl.style.display = "block";
+        clueEl.style.display = "block";
+        dotEl.style.display = "block";
+
+        loadNewWord();
+    }
+
+    function loadNewWord() {
+        if (gameOver) return;
+
+        dotEl.style.backgroundColor = "#ffb703";
+        dotEl.style.boxShadow = "0 0 15px #ffb703";
+        wordEl.style.color = "#e2e8f0";
+
+        let currentLevelPool = campaigns[activeDifficulty][currentLevel];
+        let selectedItem = currentLevelPool[wordIndexInLevel];
+        
+        currentWord = selectedItem.word;
+        visibleCharsArray = currentWord.split("");
+        missingLettersPool = [];
+
+        let actualBlanks = Math.min(blanksCount, currentWord.length - 1);
+        let indicesBlanked = new Set();
+
+        while (indicesBlanked.size < actualBlanks) {
+            let randIndex = Math.floor(Math.random() * currentWord.length);
+            indicesBlanked.add(randIndex);
+        }
+
+        for (let i = 0; i < currentWord.length; i++) {
+            if (indicesBlanked.has(i)) {
+                missingLettersPool.push({ char: currentWord[i], index: i });
+                visibleCharsArray[i] = "_";
+            }
+        }
+
+        renderWord();
+        clueEl.innerText = `CLUE: ${selectedItem.hint}`;
+        clueEl.style.color = "#9b5de5";
+        
+        levelTxt.innerText = currentLevel;
+        progressTxt.innerText = wordIndexInLevel;
+    }
+
+    function renderWord() {
+        wordEl.innerText = visibleCharsArray.join(" ");
+    }
+
+    function handleFailure(msg) {
+        currentStreak = 0;
+        streakTxt.innerText = currentStreak;
+        strikes++;
+        strikesTxt.innerText = `${strikes}/3`;
+        
+        clueEl.innerText = msg;
+        clueEl.style.color = "#ff5964";
+        wordEl.innerText = currentWord.split("").join(" ");
+        wordEl.style.color = "#ff5964";
+
+        if (strikes >= 3) {
+            gameOver = true;
+            finalScoreTxt.innerText = `Final Score: ${score} points (Failed at Level ${currentLevel})`;
+            gameOverScreen.style.display = "flex";
+        } else {
+            setTimeout(loadNewWord, 1600);
+        }
+    }
+
+    window.addEventListener("keydown", (e) => {
+        if (gameOver || missingLettersPool.length === 0 || menuScreen.style.display === "flex" || victoryScreen.style.display === "flex") return;
+
+        const pressedKey = e.key.toUpperCase();
+        if (pressedKey >= "A" && pressedKey <= "Z" && pressedKey.length === 1) {
+            
+            let matchIndex = missingLettersPool.findIndex(item => item.char === pressedKey);
+
+            if (matchIndex !== -1) {
+                let matchedTarget = missingLettersPool.splice(matchIndex, 1)[0];
+                visibleCharsArray[matchedTarget.index] = matchedTarget.char;
+                renderWord();
+
+                dotEl.style.backgroundColor = "#00f5d4";
+                dotEl.style.boxShadow = "0 0 25px #00f5d4";
+                setTimeout(() => {
+                    if (missingLettersPool.length > 0) {
+                        dotEl.style.backgroundColor = "#ffb703";
+                        dotEl.style.boxShadow = "0 0 15px #ffb703";
+                    }
+                }, 150);
+
+                if (missingLettersPool.length === 0) {
+                    wordEl.style.color = "#00f5d4";
+                    clueEl.innerText = "WORD SOLVED!";
+                    clueEl.style.color = "#00f5d4";
+
+                    currentStreak++;
+                    streakTxt.innerText = currentStreak;
+                    score += (100 * blanksCount) + (currentStreak * 15);
+                    scoreTxt.innerText = score;
+
+                    wordIndexInLevel++;
+                    
+                    if (wordIndexInLevel >= 5) {
+                        wordIndexInLevel = 0;
+                        currentLevel++;
+                        
+                        if (currentLevel > 10) {
+                            victoryScoreTxt.innerText = `Final Score: ${score} points`;
+                            victoryScreen.style.display = "flex";
+                            return;
+                        }
+                    }
+                    
+                    progressTxt.innerText = wordIndexInLevel;
+                    setTimeout(loadNewWord, 1200);
+                }
+            } else {
+                handleFailure(`INCORRECT LETTER!`);
+            }
+        }
+    });
+    </script>
+  </body>
+</html>
